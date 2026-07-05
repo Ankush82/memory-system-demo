@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Memory System — Live Demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Hanken+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root {
+  --paper:#EEF1F4; --paper-raised:#F8FAFC;
+  --ink:#13171E; --ink-soft:#4C5763; --ink-faint:#7E8995;
+  --line:#D4DBE3; --line-soft:#E2E7ED;
+  --accent:#1E47E6; --accent-deep:#1535B0; --accent-wash:rgba(30,71,230,.07);
+  --green:#16a34a; --green-wash:rgba(22,163,74,.08);
+  --red:#dc2626; --red-wash:rgba(220,38,38,.08);
+  --amber:#d97706; --amber-wash:rgba(217,119,6,.08);
+  --grid:rgba(94,118,150,.07);
+  --serif:"Fraunces",Georgia,serif;
+  --sans:"Hanken Grotesk",-apple-system,BlinkMacSystemFont,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,monospace;
+  --ease:cubic-bezier(.2,.7,.2,1);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  background-color:var(--paper);
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:32px 32px;background-position:-1px -1px;
+  color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.65;
+  -webkit-font-smoothing:antialiased;min-height:100vh;
+}
+::selection{background:var(--accent);color:#fff}
+
+/* topbar */
+.topbar{position:sticky;top:0;z-index:30;backdrop-filter:saturate(1.2) blur(7px);background:rgba(238,241,244,.85);border-bottom:1px solid var(--line-soft)}
+.topbar__inner{max-width:1100px;margin:0 auto;padding:14px 28px;display:flex;align-items:center;justify-content:space-between}
+.mark{display:inline-flex;align-items:center;gap:9px;font-family:var(--mono);font-weight:600;font-size:14px;letter-spacing:.02em;text-decoration:none;color:var(--ink)}
+.mark__glyph{width:18px;height:18px;flex:none;border:1.5px solid var(--ink);border-radius:3px;position:relative}
+.mark__glyph::after{content:"";position:absolute;inset:3px;background:var(--accent);border-radius:1px}
+.topbar__right{display:flex;align-items:center;gap:16px}
+.status-pill{font-family:var(--mono);font-size:11.5px;display:flex;align-items:center;gap:7px;padding:5px 12px;border:1px solid var(--line);border-radius:999px;background:var(--paper-raised);color:var(--ink-faint)}
+.status-dot{width:7px;height:7px;border-radius:50%;background:var(--line);flex-shrink:0;transition:background .3s}
+.status-dot.live{background:var(--green);box-shadow:0 0 0 2px var(--green-wash)}
+.status-dot.error{background:var(--red)}
+.user-pill{font-family:var(--mono);font-size:11.5px;padding:5px 12px;border:1px solid var(--accent);border-radius:999px;background:var(--accent-wash);color:var(--accent);display:none}
+
+/* layout */
+.hero{max-width:1100px;margin:0 auto;padding:48px 28px 36px}
+.hero__kicker{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:12px}
+.hero__title{font-family:var(--serif);font-size:clamp(36px,6vw,60px);font-weight:500;line-height:.95;letter-spacing:-.025em}
+.hero__sub{margin-top:18px;font-size:17px;color:var(--ink-soft);max-width:56ch;line-height:1.6}
+.hero__pills{margin-top:20px;display:flex;flex-wrap:wrap;gap:8px}
+.pill{font-family:var(--mono);font-size:11.5px;border:1px solid var(--line);border-radius:999px;padding:5px 13px;background:var(--paper-raised);color:var(--ink-soft)}
+
+.shell{max-width:1100px;margin:0 auto;padding:0 28px 96px;display:grid;grid-template-columns:320px 1fr;gap:28px}
+@media(max-width:800px){.shell{grid-template-columns:1fr}}
+
+/* cards */
+.card{background:var(--paper-raised);border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:16px}
+.card:last-child{margin-bottom:0}
+.card__head{padding:14px 18px;border-bottom:1px solid var(--line-soft);display:flex;align-items:center;justify-content:space-between}
+.card__title{font-family:var(--mono);font-size:11.5px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-soft)}
+.card__body{padding:18px}
+
+/* form elements */
+label{display:block;font-family:var(--mono);font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:6px}
+input[type=text],input[type=password],textarea{
+  width:100%;font-family:var(--mono);font-size:13px;
+  background:var(--paper);border:1px solid var(--line);border-radius:6px;
+  padding:9px 12px;color:var(--ink);outline:none;transition:border-color .18s;
+}
+input[type=text]:focus,input[type=password]:focus,textarea:focus{border-color:var(--accent)}
+textarea{resize:vertical;min-height:108px;line-height:1.55}
+.hint{font-family:var(--mono);font-size:11px;color:var(--ink-faint);margin-top:5px;line-height:1.5}
+.hint a{color:var(--accent);text-decoration:none}
+
+/* buttons */
+.btn{font-family:var(--mono);font-size:13px;font-weight:600;padding:9px 18px;border-radius:6px;border:none;cursor:pointer;display:inline-flex;align-items:center;gap:7px;transition:background .18s var(--ease),transform .1s,opacity .18s}
+.btn:active{transform:scale(.97)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn--primary{background:var(--accent);color:#fff;width:100%;justify-content:center}
+.btn--primary:hover:not(:disabled){background:var(--accent-deep)}
+.btn--ghost{background:var(--paper-raised);color:var(--ink-soft);border:1px solid var(--line)}
+.btn--ghost:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+.btn--sm{padding:5px 11px;font-size:11px}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap}
+
+/* quick fills */
+.fills{display:flex;flex-direction:column;gap:7px}
+.fill{font-family:var(--sans);font-size:13px;color:var(--ink-soft);background:var(--paper);border:1px solid var(--line);border-radius:7px;padding:9px 12px;cursor:pointer;text-align:left;line-height:1.45;transition:border-color .15s,color .15s}
+.fill:hover{border-color:var(--accent);color:var(--ink)}
+.fill strong{font-weight:600;color:var(--ink);display:block;font-family:var(--mono);font-size:11px;letter-spacing:.04em;margin-bottom:2px}
+
+/* section divider */
+.section-kicker{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin-bottom:4px}
+
+/* tabs */
+.tabbar{display:flex;gap:20px;border-bottom:1px solid var(--line);margin-bottom:20px}
+.tab{appearance:none;background:none;border:none;cursor:pointer;font-family:var(--sans);font-size:15px;font-weight:600;color:var(--ink-faint);padding:4px 0 11px;margin-bottom:-1px;border-bottom:2px solid transparent;transition:color .18s,border-color .18s}
+.tab:hover{color:var(--accent)}
+.tab.on{color:var(--ink);border-bottom-color:var(--accent)}
+.tabpanel{display:none;animation:fade .28s var(--ease)}
+.tabpanel.on{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+
+/* memory items */
+.mem-list{display:flex;flex-direction:column;gap:10px}
+.mem-item{border:1px solid var(--line);border-radius:8px;background:var(--paper-raised);padding:13px 15px;display:grid;grid-template-columns:1fr auto;gap:10px;align-items:start;animation:slide .22s var(--ease)}
+@keyframes slide{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:none}}
+.mem-text{font-size:14.5px;line-height:1.5;margin-bottom:8px}
+.mem-meta{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+.badge{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.04em;padding:2px 7px;border-radius:4px;text-transform:uppercase}
+.badge-sem{background:var(--accent-wash);color:var(--accent)}
+.badge-pro{background:var(--amber-wash);color:var(--amber)}
+.badge-epi{background:var(--green-wash);color:var(--green)}
+.badge-dim{background:var(--paper);border:1px solid var(--line);color:var(--ink-faint);font-weight:400}
+.mem-btns{display:flex;gap:5px;flex-shrink:0}
+.icon-btn{width:29px;height:29px;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink-faint);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;transition:border-color .15s,color .15s,background .15s}
+.icon-btn:hover{border-color:var(--accent);color:var(--accent)}
+.icon-btn.del:hover{border-color:var(--red);color:var(--red);background:var(--red-wash)}
+
+/* ranked */
+.ranked-list{display:flex;flex-direction:column;gap:11px}
+.ranked-item{border:1px solid var(--line);border-radius:8px;background:var(--paper-raised);padding:13px 15px;animation:slide .22s var(--ease)}
+.score-bar{height:3px;background:var(--line);border-radius:2px;margin-top:9px;overflow:hidden}
+.score-fill{height:100%;background:var(--accent);border-radius:2px;transition:width .5s var(--ease)}
+.score-label{font-family:var(--mono);font-size:10.5px;color:var(--ink-faint);margin-top:4px}
+
+/* context block */
+.ctx-block{background:var(--ink);color:#e8eaed;border-radius:8px;padding:18px;font-family:var(--mono);font-size:12.5px;line-height:1.7;white-space:pre-wrap;overflow-x:auto;position:relative;margin-top:16px}
+.ctx-label{position:absolute;top:11px;right:13px;font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.3)}
+
+/* log */
+.log-box{border:1px solid var(--line);border-radius:8px;overflow:hidden;max-height:360px;overflow-y:auto}
+.log-row{padding:8px 14px;border-bottom:1px solid var(--line-soft);font-family:var(--mono);font-size:12px;display:flex;gap:10px;align-items:baseline}
+.log-row:last-child{border-bottom:none}
+.log-row.ok{background:var(--green-wash)}
+.log-row.err{background:var(--red-wash)}
+.log-t{color:var(--ink-faint);flex-shrink:0}
+.log-m{color:var(--ink-soft)}
+.log-m .g{color:var(--green)}.log-m .r{color:var(--red)}.log-m .b{color:var(--accent)}
+
+/* empty */
+.empty{text-align:center;padding:44px 20px;color:var(--ink-faint);font-family:var(--mono);font-size:13px}
+.empty-ico{font-size:24px;margin-bottom:10px}
+
+/* spinner */
+.spin{display:inline-block;width:13px;height:13px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:rot .65s linear infinite}
+@keyframes rot{to{transform:rotate(360deg)}}
+
+/* modal */
+.overlay{position:fixed;inset:0;z-index:60;background:rgba(19,23,30,.5);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s}
+.overlay.open{opacity:1;pointer-events:auto}
+.modal{background:var(--paper-raised);border:1px solid var(--line);border-radius:12px;padding:26px;width:340px;max-width:90vw}
+.modal-title{font-family:var(--serif);font-size:21px;font-weight:500;margin-bottom:5px}
+.modal-sub{font-size:13.5px;color:var(--ink-soft);margin-bottom:18px;line-height:1.5}
+.sig-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.sig-btn{padding:11px 8px;border-radius:7px;border:1px solid var(--line);background:var(--paper);font-family:var(--mono);font-size:11.5px;font-weight:600;cursor:pointer;text-transform:uppercase;letter-spacing:.04em;transition:border-color .15s,background .15s,color .15s}
+.sig-btn:hover{border-color:var(--accent);background:var(--accent-wash);color:var(--accent)}
+
+/* toasts */
+.toasts{position:fixed;bottom:24px;right:24px;z-index:100;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.toast{font-family:var(--mono);font-size:12.5px;padding:10px 16px;border-radius:8px;border:1px solid var(--line);background:var(--paper-raised);color:var(--ink);pointer-events:auto;max-width:300px;box-shadow:0 4px 16px rgba(0,0,0,.1);animation:toast-in .28s var(--ease)}
+.toast.ok{border-color:var(--green);color:var(--green);background:var(--green-wash)}
+.toast.err{border-color:var(--red);color:var(--red);background:var(--red-wash)}
+@keyframes toast-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+
+/* setup screen */
+#setup-screen{max-width:520px;margin:60px auto;padding:0 28px}
+.setup-title{font-family:var(--serif);font-size:clamp(28px,5vw,40px);font-weight:500;letter-spacing:-.02em;margin-bottom:8px}
+.setup-sub{color:var(--ink-soft);font-size:15px;line-height:1.6;margin-bottom:28px}
+.step-num{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--accent);letter-spacing:.08em;margin-bottom:5px}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar__inner">
+    <span class="mark"><span class="mark__glyph"></span>memory-system</span>
+    <div class="topbar__right">
+      <span class="user-pill" id="user-pill">—</span>
+      <div class="status-pill">
+        <span class="status-dot" id="sdot"></span>
+        <span id="stxt">not connected</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Setup screen ───────────────────────────────── -->
+<div id="setup-screen">
+  <div class="setup-title">Connect to start</div>
+  <p class="setup-sub">You need a Supabase project and an OpenRouter key. Both are free. Your data stays in your own Supabase database.</p>
+
+  <div class="card">
+    <div class="card__head"><span class="card__title">Step 1 — Supabase</span></div>
+    <div class="card__body" style="display:flex;flex-direction:column;gap:12px">
+      <div>
+        <label>Project URL</label>
+        <input type="text" id="sb-url" placeholder="https://xxxxxxxxxxxx.supabase.co">
+      </div>
+      <div>
+        <label>Anon public key</label>
+        <input type="password" id="sb-key" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9…">
+        <p class="hint">Dashboard → Project Settings → API → anon public</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card__head"><span class="card__title">Step 2 — OpenRouter</span></div>
+    <div class="card__body" style="display:flex;flex-direction:column;gap:12px">
+      <div>
+        <label>API key</label>
+        <input type="password" id="or-key" placeholder="sk-or-v1-…">
+        <p class="hint">Get a free key at <a href="https://openrouter.ai/keys" target="_blank">openrouter.ai/keys</a>. Never stored.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card__head"><span class="card__title">Step 3 — Your identity</span></div>
+    <div class="card__body" style="display:flex;flex-direction:column;gap:12px">
+      <div>
+        <label>Display name (optional)</label>
+        <input type="text" id="display-name" placeholder="e.g. Ankush">
+        <p class="hint">Just a label — your actual ID is an anonymous UUID Supabase assigns per browser.</p>
+      </div>
+    </div>
+  </div>
+
+  <button class="btn btn--primary" id="btn-connect" onclick="connect()" style="margin-top:4px">
+    Connect &amp; start →
+  </button>
+  <p style="font-family:var(--mono);font-size:11px;color:var(--ink-faint);margin-top:12px;line-height:1.6">
+    First time? Run <strong>supabase-schema.sql</strong> in your Supabase SQL editor before connecting.
+  </p>
+</div>
+
+<!-- ── Main app (hidden until connected) ─────────── -->
+<div id="app" style="display:none">
+
+  <div class="hero">
+    <div class="hero__kicker">Live demo</div>
+    <h1 class="hero__title">ChatGPT-style<br>memory system</h1>
+    <p class="hero__sub">Extract, store, and retrieve per-user memories across conversations. Built with pgvector, Claude haiku, and Supabase RLS.</p>
+    <div class="hero__pills">
+      <span class="pill">pgvector</span>
+      <span class="pill">Claude haiku</span>
+      <span class="pill">Supabase RLS</span>
+      <span class="pill">Hybrid retrieval</span>
+      <span class="pill">Write gate</span>
+      <span class="pill">GitHub Pages</span>
+    </div>
+  </div>
+
+  <div class="shell">
+
+    <!-- LEFT -->
+    <div>
+
+      <div class="card">
+        <div class="card__head"><span class="card__title">Send conversation turn</span></div>
+        <div class="card__body" style="display:flex;flex-direction:column;gap:13px">
+          <div class="section-kicker">Flow 1 — Capture</div>
+          <div>
+            <label>Conversation text</label>
+            <textarea id="turn-input" placeholder="Paste what the user said in a conversation…"></textarea>
+          </div>
+          <div>
+            <label>Quick fills</label>
+            <div class="fills">
+              <button class="fill" onclick="fill(0)"><strong>Identity + stack</strong>I'm a senior ML engineer with 8 years Python. Building a memory system with FastAPI and pgvector. Team is in Bangalore at SecondBrainLabs.</button>
+              <button class="fill" onclick="fill(1)"><strong>Preferences</strong>I strongly prefer concise technical answers. I hate when AI explains the obvious. PyTorch only — no TensorFlow.</button>
+              <button class="fill" onclick="fill(2)"><strong>Pain point</strong>My biggest problem is retrieval quality in RAG systems. Testing pgvector vs Pinecone for production at 1M+ memories.</button>
+              <button class="fill" onclick="fill(3)"><strong>Low-value (write gate)</strong>I had oatmeal for breakfast. The weather is 28 degrees. Went for a walk this morning.</button>
+            </div>
+          </div>
+          <button class="btn btn--primary" id="btn-ingest" onclick="ingest()">Extract &amp; store memories →</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card__head"><span class="card__title">Retrieve context</span></div>
+        <div class="card__body" style="display:flex;flex-direction:column;gap:13px">
+          <div class="section-kicker">Flow 2 — Retrieval</div>
+          <div>
+            <label>Query</label>
+            <input type="text" id="query-input" placeholder="e.g. what are this user's ML preferences?">
+          </div>
+          <button class="btn btn--primary" id="btn-query" onclick="query()">Retrieve top memories →</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card__head"><span class="card__title">INV-1 isolation demo</span></div>
+        <div class="card__body" style="display:flex;flex-direction:column;gap:10px">
+          <p style="font-size:13.5px;color:var(--ink-soft);line-height:1.5">Sign in as a fresh anonymous user. They see zero memories — enforced by Supabase RLS.</p>
+          <div class="btn-row">
+            <button class="btn btn--ghost" onclick="newUser('Bob')">Sign in as Bob →</button>
+            <button class="btn btn--ghost" onclick="newUser('Alice')">Sign in as Alice →</button>
+          </div>
+          <button class="btn btn--ghost btn--sm" onclick="restoreUser()" id="btn-restore" style="display:none;align-self:flex-start">← Restore my session</button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT -->
+    <div>
+      <div class="card">
+        <div class="card__head" style="flex-wrap:wrap;gap:10px">
+          <div class="tabbar" style="margin:0;border:none;flex:1">
+            <button class="tab on" onclick="switchTab('memories',this)">Memories</button>
+            <button class="tab" onclick="switchTab('context',this)">Context block</button>
+            <button class="tab" onclick="switchTab('log',this)">Log</button>
+          </div>
+          <button class="btn btn--ghost btn--sm" onclick="loadMemories()">↺ refresh</button>
+        </div>
+        <div class="card__body">
+
+          <div class="tabpanel on" id="tab-memories">
+            <div id="mem-list-el"><div class="empty"><div class="empty-ico">◻</div>No memories yet — send a turn to extract some.</div></div>
+          </div>
+
+          <div class="tabpanel" id="tab-context">
+            <div id="ranked-el"><div class="empty"><div class="empty-ico">◻</div>Run a retrieval query to see ranked results here.</div></div>
+            <div id="ctx-wrap" style="display:none">
+              <div class="ctx-block" id="ctx-text"><span class="ctx-label">context_block</span></div>
+            </div>
+          </div>
+
+          <div class="tabpanel" id="tab-log">
+            <div class="log-box" id="log-el">
+              <div class="log-row"><span class="log-t">--:--:--</span><span class="log-m">Waiting for requests…</span></div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Feedback modal -->
+<div class="overlay" id="fb-overlay" onclick="closeFb(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-title">Give feedback</div>
+    <div class="modal-sub" id="fb-preview">—</div>
+    <div class="sig-grid">
+      <button class="sig-btn" onclick="sendFb('helpful')">👍 Helpful</button>
+      <button class="sig-btn" onclick="sendFb('wrong')">✗ Wrong</button>
+      <button class="sig-btn" onclick="sendFb('outdated')">⏱ Outdated</button>
+      <button class="sig-btn" onclick="sendFb('irrelevant')">— Irrelevant</button>
+    </div>
+    <div style="margin-top:14px;text-align:right"><button class="btn btn--ghost btn--sm" onclick="closeFb()">Cancel</button></div>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<script>
+// ── constants ──────────────────────────────────────
+const OR_BASE = 'https://openrouter.ai/api/v1';
+const IMPORTANCE_THRESHOLD = 4;
+const PII = [
+  /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/,
+  /\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/,
+  /\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b/,
+  /\b\d{3}-\d{2}-\d{4}\b/,
+  /\b(sk|pk)[-_][a-zA-Z0-9]{20,}\b/,
+  /password\s*[:=]\s*\S+/i,
+  /Bearer\s+[A-Za-z0-9\-._~+/]+=*/i,
+];
+const EXTRACTION_PROMPT = `You are a memory extraction system. Extract facts worth remembering about the USER only.
+
+Rules:
+- Extract only what the user reveals about themselves: goals, skills, projects, preferences, constraints, relationships.
+- Do NOT extract what the assistant said.
+- Do NOT extract transient facts (weather, meals, daily logistics).
+- Type: episodic=specific past event, semantic=stable fact/skill/role, procedural=preference/style/constraint
+- importance 1-10: 9-10=core identity, 7-8=stable project facts, 5-6=useful context, 1-4=skip
+- confidence 0.0-1.0
+
+Return ONLY a JSON array. Empty array [] if nothing worth keeping.
+[{"content":"...","type":"semantic|episodic|procedural","importance":7,"confidence":0.9}]
+
+Conversation turn:
+{turn}`;
+
+const FILLS = [
+  "I'm a senior ML engineer with 8 years of Python experience. Currently building a production memory system for AI agents using FastAPI, PostgreSQL with pgvector, and OpenRouter. My team is in Bangalore at SecondBrainLabs.",
+  "I strongly prefer concise technical answers and dislike verbose explanations. PyTorch only — no TensorFlow. I hate when AI restates what I just said.",
+  "My biggest problem right now is retrieval quality in RAG systems. Benchmarking pgvector against Pinecone for a production use case at 1M+ memories.",
+  "I had oatmeal for breakfast. The weather is 28 degrees today. Went for a morning walk."
+];
+
+// ── state ──────────────────────────────────────────
+let sb = null;
+let orKey = null;
+let currentUser = null;
+let savedSession = null;
+let fbTarget = null;
+let displayName = '';
+
+// ── connect ────────────────────────────────────────
+async function connect() {
+  const url = document.getElementById('sb-url').value.trim();
+  const key = document.getElementById('sb-key').value.trim();
+  orKey = document.getElementById('or-key').value.trim();
+  displayName = document.getElementById('display-name').value.trim() || 'You';
+
+  if (!url || !key) { toast('Paste your Supabase URL and anon key', 'err'); return; }
+  if (!orKey) { toast('Paste your OpenRouter key', 'err'); return; }
+
+  const btn = document.getElementById('btn-connect');
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Connecting…';
+
+  try {
+    sb = window.supabase.createClient(url, key);
+    const { data, error } = await sb.auth.signInAnonymously();
+    if (error) throw error;
+    currentUser = data.user;
+    savedSession = { url, key, session: data.session };
+
+    document.getElementById('setup-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    document.getElementById('sdot').className = 'status-dot live';
+    document.getElementById('stxt').textContent = 'Supabase connected';
+    const up = document.getElementById('user-pill');
+    up.textContent = displayName + ' · ' + currentUser.id.slice(0,8) + '…';
+    up.style.display = 'flex';
+
+    logMsg('ok', 'Signed in as ' + displayName + ' → ' + currentUser.id.slice(0,8) + '…');
+    toast('Connected — your memories are isolated to this session', 'ok');
+    await loadMemories();
+  } catch(e) {
+    toast('Connection failed: ' + e.message, 'err');
+    logMsg('err', e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Connect & start →';
+  }
+}
+
+// ── ingest ─────────────────────────────────────────
+async function ingest() {
+  const turn = document.getElementById('turn-input').value.trim();
+  if (!turn) { toast('Paste a conversation turn first', 'err'); return; }
+  const btn = document.getElementById('btn-ingest');
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Extracting with Claude…';
+  logMsg('info', 'Calling Claude haiku for extraction…');
+  try {
+    const candidates = await extract(turn);
+    logMsg('info', candidates.length + ' candidates from Claude');
+
+    const { approved, rejected } = gate(candidates, turn);
+    logMsg('info', approved.length + ' approved · ' + rejected.length + ' rejected by write gate');
+
+    if (approved.length === 0) {
+      if (rejected.length > 0)
+        toast('Write gate blocked ' + rejected.length + ' candidate(s)', 'ok');
+      else
+        toast('Nothing worth storing in that text', 'ok');
+      return;
+    }
+
+    // Embed + store each approved memory
+    let stored = 0;
+    for (const mem of approved) {
+      try {
+        const embedding = await embed(mem.content);
+        const { error } = await sb.from('memories').insert({
+          user_id: currentUser.id,
+          type: mem.type,
+          content: mem.content,
+          embedding: JSON.stringify(embedding),
+          importance: mem.importance,
+          confidence: mem.confidence,
+          source: { turn_snippet: turn.slice(0,200), stored_at: new Date().toISOString() },
+        });
+        if (!error) stored++;
+      } catch {}
+    }
+    logMsg('ok', stored + ' memor' + (stored===1?'y':'ies') + ' stored');
+    toast(stored + ' memor' + (stored===1?'y':'ies') + ' extracted & stored', 'ok');
+    await loadMemories();
+  } catch(e) {
+    logMsg('err', e.message);
+    toast('Extraction failed: ' + e.message, 'err');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Extract & store memories →';
+  }
+}
+
+// ── query ──────────────────────────────────────────
+async function query() {
+  const q = document.getElementById('query-input').value.trim();
+  if (!q) { toast('Enter a query first', 'err'); return; }
+  const btn = document.getElementById('btn-query');
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Retrieving…';
+  logMsg('info', 'Embedding query + running hybrid search…');
+  try {
+    const qEmb = await embed(q);
+    const [vecRows, ftsRows] = await Promise.all([
+      sb.rpc('match_memories', { query_embedding: JSON.stringify(qEmb), match_user_id: currentUser.id, match_count: 20 }),
+      sb.rpc('search_memories_fts', { query_text: q, match_user_id: currentUser.id, match_count: 20 }),
+    ]);
+
+    const merged = mergeResults(vecRows.data || [], ftsRows.data || []);
+    const ranked = rank(merged, 5);
+
+    renderRanked(ranked);
+    switchTab('context', document.querySelector('.tab:nth-child(2)'));
+    logMsg('ok', ranked.length + ' memories ranked · showing top 5');
+    toast(ranked.length + ' memories retrieved', 'ok');
+  } catch(e) {
+    logMsg('err', e.message);
+    toast('Retrieval failed: ' + e.message, 'err');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Retrieve top memories →';
+  }
+}
+
+// ── load memories ──────────────────────────────────
+async function loadMemories() {
+  if (!sb || !currentUser) return;
+  const { data } = await sb.from('memories').select('*').eq('user_id', currentUser.id).eq('archived', false).order('created_at', { ascending: false });
+  renderMemories(data || []);
+}
+
+// ── delete ─────────────────────────────────────────
+async function deleteMem(id) {
+  await sb.from('memories').update({ archived: true, updated_at: new Date().toISOString() }).eq('id', id);
+  logMsg('ok', 'Memory soft-deleted (archived=true, INV-2)');
+  toast('Memory deleted — gone from all future retrievals', 'ok');
+  await loadMemories();
+}
+
+// ── feedback ───────────────────────────────────────
+function openFb(id, content) { fbTarget = id; document.getElementById('fb-preview').textContent = '"' + content.slice(0,80) + (content.length>80?'…':'"'); document.getElementById('fb-overlay').classList.add('open'); }
+function closeFb(e) { if (!e || e.target===document.getElementById('fb-overlay')) document.getElementById('fb-overlay').classList.remove('open'); }
+async function sendFb(signal) {
+  if (!fbTarget) return; closeFb();
+  const delta = { helpful:1, wrong:-2, outdated:-1, irrelevant:-1 }[signal];
+  await sb.from('feedbacks').insert({ user_id: currentUser.id, memory_id: fbTarget, signal });
+  const { data } = await sb.from('memories').select('importance').eq('id', fbTarget).single();
+  if (data) {
+    const newImp = Math.max(1, Math.min(10, data.importance + delta));
+    await sb.from('memories').update({ importance: newImp, updated_at: new Date().toISOString() }).eq('id', fbTarget);
+  }
+  logMsg('ok', 'Feedback "' + signal + '" recorded → importance adjusted');
+  toast('Feedback recorded: ' + signal, 'ok');
+  await loadMemories();
+}
+
+// ── user isolation demo ────────────────────────────
+async function newUser(name) {
+  if (!savedSession) return;
+  const prevSess = await sb.auth.getSession();
+  savedSession.prevSession = prevSess.data.session;
+  const { data } = await sb.auth.signInAnonymously();
+  currentUser = data.user;
+  document.getElementById('user-pill').textContent = name + ' · ' + currentUser.id.slice(0,8) + '… (guest)';
+  document.getElementById('btn-restore').style.display = 'inline-flex';
+  logMsg('info', 'Signed in as ' + name + ' (new anonymous user) → ' + currentUser.id.slice(0,8) + '…');
+  toast('Now browsing as ' + name + ' — they see zero memories', 'ok');
+  await loadMemories();
+}
+
+async function restoreUser() {
+  if (!savedSession?.prevSession) return;
+  await sb.auth.setSession(savedSession.prevSession);
+  const { data } = await sb.auth.getUser();
+  currentUser = data.user;
+  document.getElementById('user-pill').textContent = displayName + ' · ' + currentUser.id.slice(0,8) + '…';
+  document.getElementById('btn-restore').style.display = 'none';
+  logMsg('ok', 'Restored to ' + displayName + ' · ' + currentUser.id.slice(0,8) + '…');
+  toast('Back to your session', 'ok');
+  await loadMemories();
+}
+
+// ── LLM calls ──────────────────────────────────────
+async function extract(turn) {
+  const r = await fetch(OR_BASE + '/chat/completions', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + orKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'anthropic/claude-haiku-4-5',
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: EXTRACTION_PROMPT.replace('{turn}', turn.slice(0,4000)) }]
+    })
+  });
+  const d = await r.json();
+  if (d.error) throw new Error(d.error.message);
+  let raw = d.choices[0].message.content.trim().replace(/^```[a-z]*\n?/, '').replace(/\n?```$/, '');
+  return JSON.parse(raw);
+}
+
+async function embed(text) {
+  const r = await fetch(OR_BASE + '/embeddings', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + orKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: 'text-embedding-3-small', input: text.slice(0,8000) })
+  });
+  const d = await r.json();
+  if (d.error) throw new Error(d.error.message);
+  return d.data[0].embedding;
+}
+
+// ── write gate ─────────────────────────────────────
+function gate(candidates, turn) {
+  const approved = [], rejected = [];
+  for (const c of candidates) {
+    if (!c || typeof c !== 'object') continue;
+    if ((c.importance||0) < IMPORTANCE_THRESHOLD) { rejected.push({ ...c, reason: 'importance < ' + IMPORTANCE_THRESHOLD }); continue; }
+    if (PII.some(p => p.test(c.content||''))) { rejected.push({ ...c, reason: 'PII detected' }); continue; }
+    approved.push({ type: c.type, content: String(c.content).slice(0,500), importance: Math.max(1,Math.min(10,c.importance|0)), confidence: Math.max(0,Math.min(1,c.confidence||0.8)) });
+  }
+  return { approved, rejected };
+}
+
+// ── retrieval & ranking ────────────────────────────
+function mergeResults(vecRows, ftsRows) {
+  const map = {};
+  for (const r of vecRows) {
+    map[r.id] = { ...r, vector_score: r.similarity || 0, fts_score: 0 };
+  }
+  for (const r of ftsRows) {
+    if (map[r.id]) map[r.id].fts_score = r.fts_score || 0;
+    else map[r.id] = { ...r, vector_score: 0, fts_score: r.fts_score || 0 };
+  }
+  return Object.values(map);
+}
+
+function rank(memories, topK = 5) {
+  const now = Date.now();
+  const HALF_LIFE = 30 * 24 * 3600 * 1000;
+  const MAX_REINFORCEMENTS = 20;
+  const scored = memories.map(m => {
+    const semantic = m.vector_score || 0;
+    const ageSec = now - new Date(m.created_at).getTime();
+    const recency = Math.pow(0.5, ageSec / HALF_LIFE);
+    const frequency = Math.min(1, (m.reinforcement || 0) / MAX_REINFORCEMENTS);
+    const importance = ((m.importance || 5) - 1) / 9;
+    const score = (0.4 * semantic + 0.2 * recency + 0.2 * frequency + 0.2 * importance) * (m.weight || 1);
+    return { ...m, score: Math.round(score * 10000) / 10000 };
+  });
+  return scored.sort((a, b) => b.score - a.score).slice(0, topK);
+}
+
+function buildContextBlock(ranked) {
+  if (!ranked.length) return '';
+  const groups = { procedural: [], semantic: [], episodic: [] };
+  ranked.forEach(m => groups[m.type]?.push(m.content));
+  const labels = { procedural: 'Preferences', semantic: 'Facts', episodic: 'History' };
+  let out = '## Memory context';
+  for (const [type, label] of Object.entries(labels)) {
+    if (!groups[type].length) continue;
+    out += '\n\n**' + label + ':**';
+    groups[type].forEach(c => out += '\n- ' + c);
+  }
+  return out;
+}
+
+// ── renderers ──────────────────────────────────────
+function renderMemories(list) {
+  const el = document.getElementById('mem-list-el');
+  if (!list.length) { el.innerHTML = '<div class="empty"><div class="empty-ico">◻</div>No memories for this user yet.</div>'; return; }
+  el.innerHTML = '<div class="mem-list">' + list.map(m => `
+    <div class="mem-item">
+      <div>
+        <div class="mem-text">${esc(m.content)}</div>
+        <div class="mem-meta">
+          <span class="badge badge-${m.type.slice(0,3)}">${m.type}</span>
+          <span class="badge badge-dim">imp ${m.importance}/10</span>
+          <span class="badge badge-dim">wt ${(m.weight||1).toFixed(2)}</span>
+          <span style="font-family:var(--mono);font-size:10px;color:var(--ink-faint)">${m.id.slice(0,8)}…</span>
+        </div>
+      </div>
+      <div class="mem-btns">
+        <button class="icon-btn" title="Feedback" onclick="openFb('${m.id}','${esc(m.content)}')">✦</button>
+        <button class="icon-btn del" title="Delete" onclick="deleteMem('${m.id}')">✕</button>
+      </div>
+    </div>`).join('') + '</div>';
+}
+
+function renderRanked(list) {
+  const el = document.getElementById('ranked-el');
+  const cw = document.getElementById('ctx-wrap');
+  if (!list.length) { el.innerHTML = '<div class="empty"><div class="empty-ico">◻</div>No memories matched the query.</div>'; cw.style.display='none'; return; }
+  const max = Math.max(...list.map(m => m.score));
+  el.innerHTML = '<div class="ranked-list">' + list.map((m,i) => `
+    <div class="ranked-item">
+      <div style="display:flex;align-items:center;gap:7px;margin-bottom:6px">
+        <span style="font-family:var(--mono);font-size:10px;color:var(--ink-faint)">#${i+1}</span>
+        <span class="badge badge-${m.type.slice(0,3)}">${m.type}</span>
+        <span class="badge badge-dim">imp ${m.importance}/10</span>
+        <span class="badge badge-dim">score ${m.score}</span>
+      </div>
+      <div style="font-size:14px;line-height:1.5">${esc(m.content)}</div>
+      <div class="score-bar"><div class="score-fill" style="width:${max?((m.score/max)*100).toFixed(1):0}%"></div></div>
+      <div class="score-label">0.4×semantic + 0.2×recency + 0.2×frequency + 0.2×importance</div>
+    </div>`).join('') + '</div>';
+  const cb = buildContextBlock(list);
+  const ctxEl = document.getElementById('ctx-text');
+  ctxEl.textContent = cb || '(empty)';
+  cw.style.display = 'block';
+}
+
+// ── tabs ───────────────────────────────────────────
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('on'));
+  document.querySelectorAll('.tabpanel').forEach(p => p.classList.remove('on'));
+  document.getElementById('tab-' + name).classList.add('on');
+  if (btn) btn.classList.add('on');
+}
+
+// ── utils ──────────────────────────────────────────
+function fill(i) { document.getElementById('turn-input').value = FILLS[i]; }
+
+function logMsg(type, msg) {
+  const t = new Date().toTimeString().slice(0,8);
+  const el = document.getElementById('log-el');
+  if (el.children.length === 1 && el.children[0].querySelector('.log-m')?.textContent.includes('Waiting')) el.innerHTML = '';
+  const cls = type==='ok'?'ok':type==='err'?'err':'b';
+  const row = document.createElement('div');
+  row.className = 'log-row' + (type==='ok'?' ok':type==='err'?' err':'');
+  row.innerHTML = `<span class="log-t">${t}</span><span class="log-m"><span class="${cls}">${type.toUpperCase()}</span> ${esc(msg)}</span>`;
+  el.appendChild(row);
+  el.scrollTop = el.scrollHeight;
+}
+
+function toast(msg, type='ok') {
+  const w = document.getElementById('toasts');
+  const d = document.createElement('div');
+  d.className = 'toast ' + type; d.textContent = msg; w.appendChild(d);
+  setTimeout(() => d.remove(), 3500);
+}
+
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+</script>
+</body>
+</html>
