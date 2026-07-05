@@ -155,6 +155,33 @@ textarea{resize:vertical;min-height:108px;line-height:1.55}
 #setup-screen{max-width:460px;margin:80px auto;padding:0 28px}
 .setup-title{font-family:var(--serif);font-size:clamp(28px,5vw,42px);font-weight:500;letter-spacing:-.02em;margin-bottom:8px}
 .setup-sub{color:var(--ink-soft);font-size:15px;line-height:1.6;margin-bottom:28px}
+
+/* pipeline overlay */
+.pipe-overlay{position:fixed;inset:0;z-index:70;background:rgba(19,23,30,.6);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .25s}
+.pipe-overlay.open{opacity:1;pointer-events:auto}
+.pipe-modal{background:var(--paper-raised);border:1px solid var(--line);border-radius:14px;padding:28px 28px 24px;width:460px;max-width:93vw;box-shadow:0 24px 64px rgba(0,0,0,.18)}
+.pipe-label{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.pipe-label-badge{padding:3px 9px;border-radius:4px;font-size:10px;font-weight:600;font-family:var(--mono);letter-spacing:.07em}
+.pipe-label-write{background:var(--accent-wash);color:var(--accent);border:1px solid rgba(30,71,230,.2)}
+.pipe-label-read{background:var(--green-wash);color:var(--green);border:1px solid rgba(22,163,74,.2)}
+.pipe-steps{display:flex;flex-direction:column;gap:0}
+.pipe-step{display:flex;align-items:flex-start;gap:14px;position:relative}
+.pipe-step:not(:last-child)::after{content:"";position:absolute;left:17px;top:38px;width:2px;bottom:-2px;background:var(--line);transition:background .3s}
+.pipe-step.done:not(:last-child)::after{background:var(--green)}
+.pipe-step.active:not(:last-child)::after{background:var(--accent)}
+.pipe-node{width:34px;height:34px;border-radius:50%;border:2px solid var(--line);background:var(--paper);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:13px;margin-top:8px;transition:border-color .3s,background .3s;position:relative;z-index:1}
+.pipe-step.active .pipe-node{border-color:var(--accent);background:var(--accent-wash);animation:pulse-node 1.2s ease-in-out infinite}
+.pipe-step.done .pipe-node{border-color:var(--green);background:var(--green-wash)}
+.pipe-step.error .pipe-node{border-color:var(--red);background:var(--red-wash)}
+@keyframes pulse-node{0%,100%{box-shadow:0 0 0 0 rgba(30,71,230,.3)}50%{box-shadow:0 0 0 6px rgba(30,71,230,0)}}
+.pipe-info{flex:1;padding:10px 0 18px}
+.pipe-name{font-family:var(--sans);font-size:15px;font-weight:600;line-height:1.2;transition:color .3s}
+.pipe-step.active .pipe-name{color:var(--accent)}
+.pipe-step.done .pipe-name{color:var(--green)}
+.pipe-step.error .pipe-name{color:var(--red)}
+.pipe-desc{font-family:var(--mono);font-size:11px;color:var(--ink-faint);margin-top:3px;min-height:16px;transition:color .2s}
+.pipe-step.active .pipe-desc{color:var(--ink-soft)}
+.pipe-close{margin-top:18px;text-align:right}
 </style>
 </head>
 <body>
@@ -320,6 +347,18 @@ textarea{resize:vertical;min-height:108px;line-height:1.55}
   </div>
 </div>
 
+<!-- Pipeline overlay -->
+<div class="pipe-overlay" id="pipe-overlay">
+  <div class="pipe-modal">
+    <div class="pipe-label">
+      <span id="pipe-path-badge" class="pipe-label-badge pipe-label-write">WRITE PATH</span>
+      <span style="color:var(--ink-faint)">behind the scenes</span>
+    </div>
+    <div class="pipe-steps" id="pipe-steps"></div>
+    <div class="pipe-close"><button class="btn btn--ghost btn--sm" id="pipe-close-btn" onclick="closePipeline()" style="display:none">Done ✓</button></div>
+  </div>
+</div>
+
 <!-- Feedback modal -->
 <div class="overlay" id="fb-overlay" onclick="closeFb(event)">
   <div class="modal" onclick="event.stopPropagation()">
@@ -436,24 +475,108 @@ function showApp() {
   document.getElementById('btn-disconnect').style.display = 'block';
 }
 
+// ── pipeline overlay ───────────────────────────────
+const WRITE_STEPS = [
+  { icon: '✉', name: 'Message',           desc: 'Conversation turn received' },
+  { icon: '🧠', name: 'Memory Extractor', desc: 'Claude haiku extracts candidate memories…' },
+  { icon: '⚖',  name: 'Memory Classifier',desc: 'Write gate: importance threshold + PII check' },
+  { icon: '💾', name: 'Memory Store',     desc: 'Embed + write approved memories to Supabase' },
+];
+const READ_STEPS = [
+  { icon: '✉', name: 'New Message',      desc: 'Query received from conversation' },
+  { icon: '🔍', name: 'Retriever',        desc: 'Embed query · vector search + FTS in parallel…' },
+  { icon: '📋', name: 'Context Builder',  desc: 'Rank by score · compose context block' },
+];
+
+let _pipeActive = false;
+
+function openPipeline(path) {
+  const steps = path === 'write' ? WRITE_STEPS : READ_STEPS;
+  const badge = document.getElementById('pipe-path-badge');
+  badge.textContent = path === 'write' ? 'WRITE PATH' : 'READ PATH';
+  badge.className = 'pipe-label-badge ' + (path === 'write' ? 'pipe-label-write' : 'pipe-label-read');
+
+  document.getElementById('pipe-steps').innerHTML = steps.map((s, i) => `
+    <div class="pipe-step" id="pipe-step-${i}">
+      <div class="pipe-node" id="pipe-node-${i}">${s.icon}</div>
+      <div class="pipe-info">
+        <div class="pipe-name">${s.name}</div>
+        <div class="pipe-desc" id="pipe-desc-${i}">${s.desc}</div>
+      </div>
+    </div>`).join('');
+
+  document.getElementById('pipe-close-btn').style.display = 'none';
+  document.getElementById('pipe-overlay').classList.add('open');
+  _pipeActive = true;
+}
+
+function pipeStep(i, desc) {
+  // Mark all previous as done
+  const steps = document.getElementById('pipe-steps').children;
+  for (let j = 0; j < i; j++) {
+    steps[j].classList.remove('active','error');
+    steps[j].classList.add('done');
+    document.getElementById('pipe-node-' + j).textContent = '✓';
+  }
+  // Activate current
+  if (steps[i]) {
+    steps[i].classList.remove('done','error');
+    steps[i].classList.add('active');
+    if (desc) document.getElementById('pipe-desc-' + i).textContent = desc;
+  }
+}
+
+function pipeFinish(errMsg) {
+  const steps = document.getElementById('pipe-steps').children;
+  if (errMsg) {
+    const last = steps[steps.length - 1];
+    last.classList.remove('active','done');
+    last.classList.add('error');
+    document.getElementById('pipe-desc-' + (steps.length-1)).textContent = errMsg;
+  } else {
+    for (let j = 0; j < steps.length; j++) {
+      steps[j].classList.remove('active','error');
+      steps[j].classList.add('done');
+      const n = document.getElementById('pipe-node-' + j);
+      if (n) n.textContent = '✓';
+    }
+  }
+  document.getElementById('pipe-close-btn').style.display = 'inline-flex';
+}
+
+function closePipeline() {
+  document.getElementById('pipe-overlay').classList.remove('open');
+  _pipeActive = false;
+}
+
 // ── ingest ─────────────────────────────────────────
 async function ingest() {
   const turn = document.getElementById('turn-input').value.trim();
   if (!turn) { toast('Paste a conversation turn first', 'err'); return; }
   const btn = document.getElementById('btn-ingest');
   btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Extracting with Claude…';
-  logMsg('info', 'Calling Claude haiku for extraction…');
+
+  openPipeline('write');
+  pipeStep(0, 'Conversation turn received — ' + turn.slice(0,60) + '…');
+
   try {
+    pipeStep(1, 'Calling Claude haiku (anthropic/claude-haiku-4-5)…');
     const candidates = await extract(turn);
     logMsg('info', candidates.length + ' candidates from Claude');
+
+    pipeStep(2, 'Evaluating ' + candidates.length + ' candidates — importance ≥ 4, no PII…');
+    await new Promise(r => setTimeout(r, 400));
     const { approved, rejected } = gate(candidates);
     logMsg('info', approved.length + ' approved · ' + rejected.length + ' rejected by write gate');
 
     if (approved.length === 0) {
-      toast(rejected.length ? 'Write gate blocked ' + rejected.length + ' candidate(s)' : 'Nothing worth storing in that text', 'ok');
+      pipeFinish(rejected.length ? 'Write gate rejected all ' + rejected.length + ' candidate(s)' : 'Nothing worth storing in that text');
+      toast(rejected.length ? 'Write gate blocked ' + rejected.length + ' candidate(s)' : 'Nothing worth storing', 'ok');
+      btn.disabled = false; btn.textContent = 'Extract & store memories →';
       return;
     }
 
+    pipeStep(3, 'Embedding + writing ' + approved.length + ' memor' + (approved.length===1?'y':'ies') + ' to Supabase…');
     let stored = 0;
     for (const mem of approved) {
       try {
@@ -470,10 +593,13 @@ async function ingest() {
         if (!error) stored++;
       } catch {}
     }
+
+    pipeFinish();
     logMsg('ok', stored + ' memor' + (stored===1?'y':'ies') + ' stored');
     toast(stored + ' memor' + (stored===1?'y':'ies') + ' extracted & stored', 'ok');
     await loadMemories();
   } catch(e) {
+    pipeFinish('Error: ' + e.message);
     logMsg('err', e.message);
     toast('Extraction failed: ' + e.message, 'err');
   } finally {
@@ -487,20 +613,33 @@ async function query() {
   if (!q) { toast('Enter a query first', 'err'); return; }
   const btn = document.getElementById('btn-query');
   btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Retrieving…';
-  logMsg('info', 'Embedding query + running hybrid search…');
+
+  openPipeline('read');
+  pipeStep(0, 'Query: "' + q.slice(0,70) + '"');
+
   try {
+    pipeStep(1, 'Embedding query with text-embedding-3-small…');
     const qEmb = await embed(q);
+
+    pipeStep(1, 'Running pgvector cosine search + full-text search in parallel…');
     const [vecRows, ftsRows] = await Promise.all([
       sb.rpc('match_memories', { query_embedding: JSON.stringify(qEmb), match_user_id: currentUser.id, match_count: 20 }),
       sb.rpc('search_memories_fts', { query_text: q, match_user_id: currentUser.id, match_count: 20 }),
     ]);
+
     const merged = mergeResults(vecRows.data || [], ftsRows.data || []);
+    pipeStep(2, 'Ranking ' + merged.length + ' candidates: 0.4×semantic + 0.2×recency + 0.2×frequency + 0.2×importance…');
+    await new Promise(r => setTimeout(r, 350));
+
     const ranked = rank(merged, 5);
+    pipeFinish();
+
     renderRanked(ranked);
-    switchTab('context', document.querySelector('.tab:nth-child(2)'));
+    switchTab('context', document.querySelectorAll('.tab')[1]);
     logMsg('ok', ranked.length + ' memories ranked · showing top 5');
     toast(ranked.length + ' memories retrieved', 'ok');
   } catch(e) {
+    pipeFinish('Error: ' + e.message);
     logMsg('err', e.message);
     toast('Retrieval failed: ' + e.message, 'err');
   } finally {
