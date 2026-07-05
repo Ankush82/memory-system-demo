@@ -254,6 +254,27 @@ textarea{resize:vertical;min-height:108px;line-height:1.55}
         </div>
       </div>
 
+      <div class="card">
+        <div class="card__head"><span class="card__title">Decay simulator</span></div>
+        <div class="card__body" style="display:flex;flex-direction:column;gap:13px">
+          <div class="section-kicker">Flow 3 — Decay</div>
+          <p style="font-size:13px;color:var(--ink-soft);line-height:1.5">Each day weights decay by ×0.95. Memories below 0.10 are archived and never retrieved again.</p>
+          <div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end">
+            <div>
+              <label>Simulate days</label>
+              <input type="text" id="decay-days" value="7" style="text-align:center">
+            </div>
+            <button class="btn btn--ghost" onclick="runDecay()" id="btn-decay">Run →</button>
+          </div>
+          <div id="decay-preview" style="display:none;border:1px solid var(--line);border-radius:7px;overflow:hidden">
+            <div style="padding:9px 13px;border-bottom:1px solid var(--line-soft);font-family:var(--mono);font-size:10.5px;color:var(--ink-faint);display:flex;justify-content:space-between">
+              <span>memory</span><span>weight after</span>
+            </div>
+            <div id="decay-rows"></div>
+          </div>
+          <button class="btn btn--primary" onclick="applyDecay()" id="btn-apply-decay" style="display:none">Apply to database →</button>
+        </div>
+      </div>
 
     </div>
 
@@ -264,6 +285,7 @@ textarea{resize:vertical;min-height:108px;line-height:1.55}
           <div class="tabbar" style="margin:0;border:none;flex:1">
             <button class="tab on" onclick="switchTab('memories',this)">Memories</button>
             <button class="tab" onclick="switchTab('context',this)">Context block</button>
+            <button class="tab" onclick="switchTab('decay-vis',this)">Decay</button>
             <button class="tab" onclick="switchTab('log',this)">Log</button>
           </div>
           <button class="btn btn--ghost btn--sm" onclick="loadMemories()">↺ refresh</button>
@@ -279,6 +301,10 @@ textarea{resize:vertical;min-height:108px;line-height:1.55}
             <div id="ctx-wrap" style="display:none">
               <div class="ctx-block" id="ctx-text"><span class="ctx-label">context_block</span></div>
             </div>
+          </div>
+
+          <div class="tabpanel" id="tab-decay-vis">
+            <div id="decay-vis-el"><div class="empty"><div class="empty-ico">◻</div>Run the decay simulator to preview weight changes.</div></div>
           </div>
 
           <div class="tabpanel" id="tab-log">
@@ -614,17 +640,37 @@ function buildContextBlock(ranked) {
 }
 
 // ── renderers ──────────────────────────────────────
+function weightColor(w) {
+  if (w >= 0.7) return 'var(--green)';
+  if (w >= 0.3) return 'var(--amber)';
+  return 'var(--red)';
+}
+
 function renderMemories(list) {
   const el = document.getElementById('mem-list-el');
   if (!list.length) { el.innerHTML = '<div class="empty"><div class="empty-ico">◻</div>No memories for this user yet.</div>'; return; }
-  el.innerHTML = '<div class="mem-list">' + list.map(m => `
-    <div class="mem-item">
-      <div>
+  el.innerHTML = '<div class="mem-list">' + list.map(m => {
+    const w = m.weight || 1;
+    const pct = Math.round(w * 100);
+    const col = weightColor(w);
+    const daysLeft = Math.floor(Math.log(0.10 / w) / Math.log(0.95));
+    const nearArchive = w < 0.3;
+    return `
+    <div class="mem-item" style="${nearArchive ? 'border-color:var(--red);' : ''}">
+      <div style="min-width:0">
         <div class="mem-text">${esc(m.content)}</div>
+        <div style="margin:7px 0 4px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <span style="font-family:var(--mono);font-size:10px;color:${col};font-weight:600">weight ${w.toFixed(3)}</span>
+            <span style="font-family:var(--mono);font-size:10px;color:var(--ink-faint)">${nearArchive ? '⚠ archive in ~'+daysLeft+'d' : '~'+daysLeft+'d to archive'}</span>
+          </div>
+          <div style="height:3px;background:var(--line);border-radius:2px;overflow:hidden">
+            <div style="height:100%;width:${pct}%;background:${col};border-radius:2px;transition:width .4s var(--ease)"></div>
+          </div>
+        </div>
         <div class="mem-meta">
           <span class="badge badge-${m.type.slice(0,3)}">${m.type}</span>
           <span class="badge badge-dim">imp ${m.importance}/10</span>
-          <span class="badge badge-dim">wt ${(m.weight||1).toFixed(2)}</span>
           <span style="font-family:var(--mono);font-size:10px;color:var(--ink-faint)">${m.id.slice(0,8)}…</span>
         </div>
       </div>
@@ -632,7 +678,8 @@ function renderMemories(list) {
         <button class="icon-btn" title="Feedback" onclick="openFb('${m.id}','${esc(m.content)}')">✦</button>
         <button class="icon-btn del" title="Delete" onclick="deleteMem('${m.id}')">✕</button>
       </div>
-    </div>`).join('') + '</div>';
+    </div>`;
+  }).join('') + '</div>';
 }
 
 function renderRanked(list) {
@@ -655,6 +702,115 @@ function renderRanked(list) {
   const ctxEl = document.getElementById('ctx-text');
   ctxEl.textContent = buildContextBlock(list) || '(empty)';
   cw.style.display = 'block';
+}
+
+// ── decay simulator ───────────────────────────────
+let _decayPreview = [];
+
+async function runDecay() {
+  const days = Math.max(1, Math.min(365, parseInt(document.getElementById('decay-days').value) || 7));
+  if (!sb || !currentUser) return;
+
+  const { data } = await sb.from('memories').select('id,content,weight,type,importance').eq('user_id', currentUser.id).eq('archived', false);
+  if (!data?.length) { toast('No memories to decay', 'err'); return; }
+
+  const DECAY_RATE = 0.95;
+  const ARCHIVE_THRESHOLD = 0.10;
+
+  _decayPreview = data.map(m => {
+    const before = m.weight || 1;
+    const after = before * Math.pow(DECAY_RATE, days);
+    return { ...m, before, after, willArchive: after < ARCHIVE_THRESHOLD };
+  }).sort((a, b) => a.after - b.after);
+
+  // Preview rows in left card
+  const rows = document.getElementById('decay-rows');
+  rows.innerHTML = _decayPreview.map(m => {
+    const pct = Math.round(m.after * 100);
+    const col = m.willArchive ? 'var(--red)' : m.after < 0.3 ? 'var(--amber)' : 'var(--green)';
+    return `<div style="padding:9px 13px;border-bottom:1px solid var(--line-soft);display:flex;align-items:center;gap:10px">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:4px">${esc(m.content)}</div>
+        <div style="height:3px;background:var(--line);border-radius:2px;overflow:hidden">
+          <div style="height:100%;width:${pct}%;background:${col};border-radius:2px"></div>
+        </div>
+      </div>
+      <div style="font-family:var(--mono);font-size:11px;color:${col};flex-shrink:0;text-align:right">
+        ${m.before.toFixed(2)} → ${m.after.toFixed(3)}<br>
+        <span style="font-size:10px">${m.willArchive ? '⚠ archived' : ''}</span>
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('decay-preview').style.display = 'block';
+  document.getElementById('btn-apply-decay').style.display = 'block';
+
+  // Decay vis tab
+  const archived = _decayPreview.filter(m => m.willArchive).length;
+  const survived = _decayPreview.length - archived;
+  document.getElementById('decay-vis-el').innerHTML = `
+    <div style="margin-bottom:16px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+      <div style="border:1px solid var(--line);border-radius:8px;padding:14px;text-align:center">
+        <div style="font-family:var(--mono);font-size:22px;font-weight:600">${days}</div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--ink-faint);margin-top:2px">days simulated</div>
+      </div>
+      <div style="border:1px solid var(--line);border-radius:8px;padding:14px;text-align:center;background:var(--green-wash)">
+        <div style="font-family:var(--mono);font-size:22px;font-weight:600;color:var(--green)">${survived}</div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--green);margin-top:2px">survive</div>
+      </div>
+      <div style="border:1px solid var(--line);border-radius:8px;padding:14px;text-align:center;background:var(--red-wash)">
+        <div style="font-family:var(--mono);font-size:22px;font-weight:600;color:var(--red)">${archived}</div>
+        <div style="font-family:var(--mono);font-size:10px;color:var(--red);margin-top:2px">archived</div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      ${_decayPreview.map(m => {
+        const pct = Math.round(m.after * 100);
+        const col = m.willArchive ? 'var(--red)' : m.after < 0.3 ? 'var(--amber)' : 'var(--green)';
+        return `<div style="border:1px solid ${m.willArchive?'var(--red)':'var(--line)'};border-radius:8px;padding:11px 14px;background:${m.willArchive?'var(--red-wash)':'var(--paper-raised)'}">
+          <div style="font-size:13.5px;line-height:1.45;margin-bottom:7px">${esc(m.content)}</div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:5px;align-items:center">
+            <span style="font-family:var(--mono);font-size:10.5px;color:var(--ink-faint)">${m.before.toFixed(2)} → <strong style="color:${col}">${m.after.toFixed(3)}</strong></span>
+            <span style="font-family:var(--mono);font-size:10px;color:${col}">${m.willArchive ? '⚠ will be archived' : pct + '% weight remaining'}</span>
+          </div>
+          <div style="height:4px;background:var(--line);border-radius:2px;overflow:hidden">
+            <div style="height:100%;width:${pct}%;background:${col};border-radius:2px"></div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+
+  switchTab('decay-vis', document.querySelectorAll('.tab')[2]);
+  logMsg('ok', days + 'd decay preview: ' + survived + ' survive, ' + archived + ' archived');
+}
+
+async function applyDecay() {
+  if (!_decayPreview.length) return;
+  const btn = document.getElementById('btn-apply-decay');
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Applying…';
+
+  const DECAY_RATE = 0.95;
+  const days = Math.max(1, parseInt(document.getElementById('decay-days').value) || 7);
+
+  let decayed = 0, archived = 0;
+  for (const m of _decayPreview) {
+    try {
+      if (m.willArchive) {
+        await sb.from('memories').update({ archived: true, updated_at: new Date().toISOString() }).eq('id', m.id);
+        archived++;
+      } else {
+        await sb.from('memories').update({ weight: m.after, updated_at: new Date().toISOString() }).eq('id', m.id);
+        decayed++;
+      }
+    } catch {}
+  }
+
+  logMsg('ok', 'Decay applied: ' + decayed + ' decayed, ' + archived + ' archived');
+  toast(decayed + ' decayed · ' + archived + ' archived', 'ok');
+  _decayPreview = [];
+  document.getElementById('decay-preview').style.display = 'none';
+  btn.style.display = 'none';
+  btn.disabled = false; btn.textContent = 'Apply to database →';
+  await loadMemories();
 }
 
 // ── tabs ───────────────────────────────────────────
