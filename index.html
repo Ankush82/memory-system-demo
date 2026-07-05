@@ -345,6 +345,105 @@ textarea{resize:vertical;min-height:108px;line-height:1.55}
     </div>
 
   </div>
+
+  <!-- ── Production roadmap ─────────────────────────── -->
+  <div style="max-width:1100px;margin:0 auto;padding:0 28px 96px">
+
+    <div style="border-top:1px solid var(--line);padding-top:52px;margin-bottom:36px">
+      <div style="font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:10px">Version 2</div>
+      <h2 style="font-family:var(--serif);font-size:clamp(28px,4vw,44px);font-weight:500;letter-spacing:-.02em;line-height:1">What production adds</h2>
+      <p style="margin-top:14px;font-size:16px;color:var(--ink-soft);max-width:54ch;line-height:1.6">Past the MVP, memory becomes much more sophisticated. Each component below sounds like jargon until you see the plain idea behind it.</p>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:20px">
+
+      <!-- Memory Graph -->
+      <div style="background:var(--paper-raised);border:1px solid var(--line);border-radius:12px;padding:24px;display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+          <div style="font-size:22px">◈</div>
+          <span style="font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.06em;padding:3px 9px;border-radius:4px;background:var(--accent-wash);color:var(--accent);border:1px solid rgba(30,71,230,.18);white-space:nowrap">v2</span>
+        </div>
+        <div style="font-family:var(--serif);font-size:20px;font-weight:500;line-height:1.15">Memory Graph</div>
+        <p style="font-size:14px;color:var(--ink-soft);line-height:1.6">Instead of a flat list of sentences, memories become nodes joined by typed edges. A single link — user → project — seeds the whole graph. Retrieval can walk relationships rather than guess from similarity.</p>
+        <div style="margin-top:auto;padding-top:12px;border-top:1px solid var(--line-soft)">
+          <div style="font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:5px">Architecture</div>
+          <div style="font-family:var(--mono);font-size:12px;color:var(--ink-soft);line-height:1.6">An <code style="background:var(--paper);padding:1px 5px;border-radius:3px;border:1px solid var(--line)">edges</code> table in Postgres <span style="color:var(--ink-faint)">(from_id, to_id, relation)</span> sits beside the vector store. Retrieval gains a third path that walks the graph.</div>
+        </div>
+      </div>
+
+      <!-- Hybrid Retrieval -->
+      <div style="background:var(--paper-raised);border:1px solid var(--line);border-radius:12px;padding:24px;display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+          <div style="font-size:22px">⊕</div>
+          <span style="font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.06em;padding:3px 9px;border-radius:4px;background:var(--accent-wash);color:var(--accent);border:1px solid rgba(30,71,230,.18);white-space:nowrap">v2</span>
+        </div>
+        <div style="font-family:var(--serif);font-size:20px;font-weight:500;line-height:1.15">Hybrid Retrieval</div>
+        <p style="font-size:14px;color:var(--ink-soft);line-height:1.6">Search three ways at once — vector finds meaning, keyword finds exact strings like a name or version number, graph follows relationships. Three weak signals combine into one strong answer.</p>
+        <div style="margin-top:auto;padding-top:12px;border-top:1px solid var(--line-soft)">
+          <div style="font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:5px">Architecture</div>
+          <div style="font-family:var(--mono);font-size:12px;color:var(--ink-soft);line-height:1.6">Retriever fans out to vector, keyword, and graph in parallel. Ranking merges scores from all three paths before returning results.</div>
+        </div>
+      </div>
+
+      <!-- Reflection Agent -->
+      <div style="background:var(--paper-raised);border:1px solid var(--line);border-radius:12px;padding:24px;display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+          <div style="font-size:22px">↺</div>
+          <span style="font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.06em;padding:3px 9px;border-radius:4px;background:var(--accent-wash);color:var(--accent);border:1px solid rgba(30,71,230,.18);white-space:nowrap">v2</span>
+        </div>
+        <div style="font-family:var(--serif);font-size:20px;font-weight:500;line-height:1.15">Reflection Agent</div>
+        <p style="font-size:14px;color:var(--ink-soft);line-height:1.6">A background worker that re-reads many raw memories and rewrites them into fewer, cleaner ones. "Uses Postgres," "uses pgvector," "deploys with Docker" become one: "runs a Postgres and Docker stack."</p>
+        <div style="margin-top:auto;padding-top:12px;border-top:1px solid var(--line-soft)">
+          <div style="font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:5px">Architecture</div>
+          <div style="font-family:var(--mono);font-size:12px;color:var(--ink-soft);line-height:1.6">A scheduled agent reads the store, writes consolidated memories back, and archives the originals. Runs off the request path, like decay.</div>
+        </div>
+      </div>
+
+      <!-- Memory Compression -->
+      <div style="background:var(--paper-raised);border:1px solid var(--line);border-radius:12px;padding:24px;display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+          <div style="font-size:22px">⊟</div>
+          <span style="font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.06em;padding:3px 9px;border-radius:4px;background:var(--accent-wash);color:var(--accent);border:1px solid rgba(30,71,230,.18);white-space:nowrap">v2</span>
+        </div>
+        <div style="font-family:var(--serif);font-size:20px;font-weight:500;line-height:1.15">Memory Compression</div>
+        <p style="font-size:14px;color:var(--ink-soft);line-height:1.6">Replace a hundred detailed memories with ten summaries — to save storage and, more importantly, context window space. Reflection improves quality; compression reduces volume and cost.</p>
+        <div style="margin-top:auto;padding-top:12px;border-top:1px solid var(--line-soft)">
+          <div style="font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:5px">Architecture</div>
+          <div style="font-family:var(--mono);font-size:12px;color:var(--ink-soft);line-height:1.6">A background step produces high-priority summary memories and archives raw rows. Direct fix for the memory-explosion failure mode.</div>
+        </div>
+      </div>
+
+      <!-- Conflict Resolution -->
+      <div style="background:var(--paper-raised);border:1px solid var(--line);border-radius:12px;padding:24px;display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+          <div style="font-size:22px">⚡</div>
+          <span style="font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.06em;padding:3px 9px;border-radius:4px;background:var(--accent-wash);color:var(--accent);border:1px solid rgba(30,71,230,.18);white-space:nowrap">v2</span>
+        </div>
+        <div style="font-family:var(--serif);font-size:20px;font-weight:500;line-height:1.15">Conflict Resolution</div>
+        <p style="font-size:14px;color:var(--ink-soft);line-height:1.6">When a new memory contradicts an old one, decide which is true now. The system must not keep both and confuse itself. Newer and higher-confidence usually wins — but the old one's provenance is always preserved.</p>
+        <div style="margin-top:auto;padding-top:12px;border-top:1px solid var(--line-soft)">
+          <div style="font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:5px">Architecture</div>
+          <div style="font-family:var(--mono);font-size:12px;color:var(--ink-soft);line-height:1.6">A check on the write path compares each new memory against existing ones on the same subject before committing. Also runs inside the Reflection agent.</div>
+        </div>
+      </div>
+
+      <!-- Memory Governance -->
+      <div style="background:var(--paper-raised);border:1px solid var(--line);border-radius:12px;padding:24px;display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+          <div style="font-size:22px">⚖</div>
+          <span style="font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.06em;padding:3px 9px;border-radius:4px;background:var(--accent-wash);color:var(--accent);border:1px solid rgba(30,71,230,.18);white-space:nowrap">v2</span>
+        </div>
+        <div style="font-family:var(--serif);font-size:20px;font-weight:500;line-height:1.15">Memory Governance</div>
+        <p style="font-size:14px;color:var(--ink-soft);line-height:1.6">The rules for what may be remembered and what must be forgotten. This grows into a full concern at scale — a policy layer that wraps every write, enforces retention limits, and provides audit trails.</p>
+        <div style="margin-top:auto;padding-top:12px;border-top:1px solid var(--line-soft)">
+          <div style="font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:5px">Architecture</div>
+          <div style="font-family:var(--mono);font-size:12px;color:var(--ink-soft);line-height:1.6">A policy wrapper around every write operation. Enforces PII rules, retention windows, user deletion rights, and change auditing via provenance metadata.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
 </div>
 
 <!-- Pipeline overlay -->
