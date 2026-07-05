@@ -713,8 +713,13 @@ async function extract(turn) {
   });
   const d = await r.json();
   if (d.error) throw new Error(d.error.message);
-  let raw = d.choices[0].message.content.trim().replace(/^```[a-z]*\n?/, '').replace(/\n?```$/, '');
-  return JSON.parse(raw);
+  let raw = d.choices[0].message.content.trim();
+  // Strip markdown fences if present
+  raw = raw.replace(/^```[a-z]*\n?/, '').replace(/\n?```$/, '').trim();
+  // Extract the JSON array even if Claude wraps it in explanatory text
+  const match = raw.match(/\[[\s\S]*\]/);
+  if (!match) return [];
+  return JSON.parse(match[0]);
 }
 
 async function embed(text) {
