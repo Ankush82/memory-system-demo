@@ -182,6 +182,7 @@ textarea{resize:vertical;min-height:108px;line-height:1.55}
     <span class="mark"><span class="mark__glyph"></span>memory-system</span>
     <div class="topbar__right">
       <span class="user-pill" id="user-pill">—</span>
+      <button onclick="disconnect()" id="btn-disconnect" style="display:none;font-family:var(--mono);font-size:11px;background:none;border:1px solid var(--line);border-radius:6px;padding:4px 10px;color:var(--ink-faint);cursor:pointer;" onmouseover="this.style.color='var(--red)';this.style.borderColor='var(--red)'" onmouseout="this.style.color='var(--ink-faint)';this.style.borderColor='var(--line)'">sign out</button>
       <div class="status-pill">
         <span class="status-dot" id="sdot"></span>
         <span id="stxt">not connected</span>
@@ -427,6 +428,12 @@ async function connect() {
     currentUser = data.user;
     savedSession = { url, key, session: data.session };
 
+    // Persist so the page auto-connects next visit
+    localStorage.setItem('msys_sb_url', url);
+    localStorage.setItem('msys_sb_key', key);
+    localStorage.setItem('msys_or_key', orKey);
+    localStorage.setItem('msys_name', displayName);
+
     document.getElementById('setup-screen').style.display = 'none';
     document.getElementById('app').style.display = 'block';
     document.getElementById('sdot').className = 'status-dot live';
@@ -434,6 +441,7 @@ async function connect() {
     const up = document.getElementById('user-pill');
     up.textContent = displayName + ' · ' + currentUser.id.slice(0,8) + '…';
     up.style.display = 'flex';
+    document.getElementById('btn-disconnect').style.display = 'block';
 
     logMsg('ok', 'Signed in as ' + displayName + ' → ' + currentUser.id.slice(0,8) + '…');
     toast('Connected — your memories are isolated to this session', 'ok');
@@ -742,6 +750,58 @@ function toast(msg, type='ok') {
 }
 
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+function disconnect() {
+  ['msys_sb_url','msys_sb_key','msys_or_key','msys_name'].forEach(k => localStorage.removeItem(k));
+  location.reload();
+}
+
+// ── auto-connect on load ───────────────────────────
+(async function init() {
+  const url  = localStorage.getItem('msys_sb_url');
+  const key  = localStorage.getItem('msys_sb_key');
+  const orK  = localStorage.getItem('msys_or_key');
+  const name = localStorage.getItem('msys_name') || 'You';
+  if (!url || !key || !orK) return; // first visit — show setup
+
+  // Pre-fill fields in case auto-connect fails
+  document.getElementById('sb-url').value  = url;
+  document.getElementById('sb-key').value  = key;
+  document.getElementById('or-key').value  = orK;
+  document.getElementById('display-name').value = name;
+
+  orKey = orK; displayName = name;
+  document.getElementById('sdot').className = 'status-dot';
+  document.getElementById('stxt').textContent = 'reconnecting…';
+
+  try {
+    sb = window.supabase.createClient(url, key);
+    // Restore existing session if Supabase has one in its own storage
+    const { data: { session } } = await sb.auth.getSession();
+    let user;
+    if (session) {
+      user = session.user;
+    } else {
+      const { data, error } = await sb.auth.signInAnonymously();
+      if (error) throw error;
+      user = data.user;
+    }
+    currentUser = user;
+    savedSession = { url, key };
+
+    document.getElementById('setup-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    document.getElementById('sdot').className = 'status-dot live';
+    document.getElementById('stxt').textContent = 'Supabase connected';
+    const up = document.getElementById('user-pill');
+    up.textContent = displayName + ' · ' + currentUser.id.slice(0,8) + '…';
+    up.style.display = 'flex';
+    document.getElementById('btn-disconnect').style.display = 'block';
+    await loadMemories();
+  } catch(e) {
+    document.getElementById('stxt').textContent = 'reconnect failed';
+  }
+})();
 </script>
 </body>
 </html>
