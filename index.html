@@ -208,14 +208,11 @@ textarea{resize:vertical;min-height:108px;line-height:1.55}
   <div class="hero">
     <div class="hero__kicker">Live demo</div>
     <h1 class="hero__title">ChatGPT-style<br>memory system</h1>
-    <p class="hero__sub">Extract, store, and retrieve per-user memories across conversations. Built with pgvector, Claude haiku, and Supabase RLS.</p>
+    <p class="hero__sub">Extract, store, and retrieve per-user memories across conversations.</p>
     <div class="hero__pills">
       <span class="pill">pgvector</span>
-      <span class="pill">Claude haiku</span>
-      <span class="pill">Supabase RLS</span>
       <span class="pill">Hybrid retrieval</span>
       <span class="pill">Write gate</span>
-      <span class="pill">GitHub Pages</span>
     </div>
   </div>
 
@@ -257,17 +254,6 @@ textarea{resize:vertical;min-height:108px;line-height:1.55}
         </div>
       </div>
 
-      <div class="card">
-        <div class="card__head"><span class="card__title">INV-1 isolation demo</span></div>
-        <div class="card__body" style="display:flex;flex-direction:column;gap:10px">
-          <p style="font-size:13.5px;color:var(--ink-soft);line-height:1.5">Sign in as a fresh anonymous user. They see zero memories — enforced by Supabase RLS.</p>
-          <div class="btn-row">
-            <button class="btn btn--ghost" onclick="newUser('Bob')">Sign in as Bob →</button>
-            <button class="btn btn--ghost" onclick="newUser('Alice')">Sign in as Alice →</button>
-          </div>
-          <button class="btn btn--ghost btn--sm" onclick="restoreUser()" id="btn-restore" style="display:none;align-self:flex-start">← Restore my session</button>
-        </div>
-      </div>
 
     </div>
 
